@@ -83,17 +83,17 @@ class ResumePayload(BaseModel):
     approve: bool
     change_ticket: Optional[str] = None
 
-async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = None):
+async def run_workflow(inc_id: str, payload: Optional[Dict[str, Any]] = None):
     """
     The CORE engine that runs the LangGraph workflow independently.
     Broadcasts events to the global broadcaster but is NOT a generator.
     """
-    config = {"configurable": {"thread_id": incident_id}}
+    config = {"configurable": {"thread_id": inc_id}}
     
     # Initial broadcast to set the stage on the dashboard
     entity_name = payload.get('offending_entity', 'unknown resource') if payload else 'existing incident'
     await broadcaster.broadcast({
-        "incident_id": incident_id,
+        "incident_id": inc_id,
         "node": "sensor",
         "status": "active",
         "message": f"🕵️ Analysis initialized for {entity_name}...",
@@ -101,7 +101,7 @@ async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = Non
         "timestamp": asyncio.get_event_loop().time()
     })
     
-    print_system_msg(f"⚙️  Workflow Execution Started: {incident_id}")
+    print_system_msg(f"⚙️  Workflow Execution Started: {inc_id}")
     
     # If payload is provided, it's a new run. Otherwise, it's a resumption.
     stream = graph_app.astream(payload, config=config) if payload else graph_app.astream(None, config=config)
@@ -111,8 +111,8 @@ async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = Non
         await asyncio.sleep(20)
         state = await graph_app.aget_state(config)
         if state.next and state.next[0] == "approval":
-            print_system_msg(f"⏱️  Auto-Approving {incident_id} after 20s timeout.")
-            await run_workflow(incident_id) # Recursive call with no payload to resume
+            print_system_msg(f"⏱️  Auto-Approving {inc_id} after 20s timeout.")
+            await run_workflow(inc_id) # Recursive call with no payload to resume
 
     try:
         async for event in stream:
@@ -124,7 +124,7 @@ async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = Non
                         update_data = {k: v for k, v in state_update.items() if k in ["severity", "remediation_action", "execution_log", "narrative", "offending_entity"]}
                     
                     message = {
-                        "incident_id": incident_id,
+                        "incident_id": inc_id,
                         "node": node_name,
                         "status": "completed",
                         "timestamp": asyncio.get_event_loop().time(),
@@ -136,7 +136,7 @@ async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = Non
         state = await graph_app.aget_state(config)
         if state.next:
             await broadcaster.broadcast({
-                "incident_id": incident_id, 
+                "incident_id": inc_id, 
                 "status": "paused", 
                 "next": state.next[0], 
                 "message": "Waiting for Human Approval (Auto-approving in 20s...)"
@@ -145,7 +145,7 @@ async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = Non
             asyncio.create_task(auto_approve_timer())
         else:
             await broadcaster.broadcast({
-                "incident_id": incident_id, 
+                "incident_id": inc_id, 
                 "status": "finished", 
                 "message": "Workflow completed successfully"
             })
@@ -153,7 +153,7 @@ async def run_workflow(incident_id: str, payload: Optional[Dict[str, Any]] = Non
     except Exception as e:
         print_system_msg(f"❌ Workflow Engine Error: {e}")
         await broadcaster.broadcast({
-            "incident_id": incident_id, 
+            "incident_id": inc_id, 
             "status": "error", 
             "message": str(e)
         })
@@ -328,26 +328,17 @@ async def simulate_logs(request: Request):
         {
             "event_source": "aws.s3",
             "event_type": "PutBucketPublicAccessBlock",
-            "resource_id": "audit-aura-evidence-store",
-            "user_identity": "contractor-99",
+            "resource_id": "prod-audit-forensics-vault-us-east-1",
+            "user_identity": "contractor-jenkins-svc",
             "timestamp": datetime.now().isoformat(),
             "action": "s3.PublicAccessDisabled",
             "raw_details": {"PublicAccessBlock": "false", "RestrictPublicBuckets": "false"}
         },
         {
-            "event_source": "ibm.iam",
-            "event_type": "user.mfa.update",
-            "resource_id": "crn:v1:bluemix:public:iam::::user:contractor@partner.com",
-            "user_identity": "admin-system",
-            "timestamp": datetime.now().isoformat(),
-            "action": "iam-identity.user-mfa.update",
-            "raw_details": {"mfa": "NONE"}
-        },
-        {
             "event_source": "kubernetes",
             "event_type": "CreateRoleBinding",
-            "resource_id": "cluster-admin-binding",
-            "user_identity": "service-account-a",
+            "resource_id": "k8s-admin-binding-escalation",
+            "user_identity": "github-actions-runner",
             "timestamp": datetime.now().isoformat(),
             "action": "rbac.authorization.k8s.io/create",
             "raw_details": {"role": "cluster-admin", "subject": "system:unauthenticated"}
@@ -355,8 +346,8 @@ async def simulate_logs(request: Request):
         {
             "event_source": "azure.compute",
             "event_type": "VirtualMachineCreate",
-            "resource_id": "audit-aura-unencrypted-vm",
-            "user_identity": "dev-user-01",
+            "resource_id": "corp-dev-sandbox-vm-04",
+            "user_identity": "external-vendor-01",
             "timestamp": datetime.now().isoformat(),
             "action": "Microsoft.Compute/virtualMachines/write",
             "raw_details": {"encryptionAtHost": "false", "disks": [{"encryptionSettings": {"enabled": "false"}}]}

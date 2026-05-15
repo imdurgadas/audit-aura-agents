@@ -13,6 +13,10 @@ def narrator_node(state: GraphState) -> GraphState:
     """
     llm = ChatOpenAI(model="google/gemma-4-e4b", temperature=0.7)
     
+    incident_id = state.get("incident_id", "Unknown")
+    logs = state.get("logs", [])
+    full_logs_str = json.dumps(logs, indent=2)
+    
     retry_count = state.get("retry_count", 0)
     validation_status = state.get("validation_status", "Unknown")
     
