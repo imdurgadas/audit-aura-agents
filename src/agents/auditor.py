@@ -60,7 +60,8 @@ def perform_bulk_audit(logs: List[Dict[str, Any]]) -> List[IndividualEvaluation]
         CRITICAL INSTRUCTIONS:
         1. If NO violation is detected for a log, set ViolationDetected=False.
         2. If a violation is detected, select the most appropriate remediation script from the list.
-        3. Be specific about which Control IDs are violated.
+        3. For 'shadow-it' or 'unmanaged' resources that seem suspicious or persistent, USE 'fail_script.py' to trigger an escalation workflow.
+        4. Be specific about which Control IDs are violated.
         
         Available Scripts: [{scripts_list}]
         

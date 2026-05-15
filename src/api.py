@@ -351,6 +351,15 @@ async def simulate_logs(request: Request):
             "timestamp": datetime.now().isoformat(),
             "action": "Microsoft.Compute/virtualMachines/write",
             "raw_details": {"encryptionAtHost": "false", "disks": [{"encryptionSettings": {"enabled": "false"}}]}
+        },
+        {
+            "event_source": "shadow-it.compute",
+            "event_type": "InstanceLaunch",
+            "resource_id": "unknown-unmanaged-node-99",
+            "user_identity": "anonymous-api-key",
+            "timestamp": datetime.now().isoformat(),
+            "action": "compute.instance.launch",
+            "raw_details": {"os": "outdated-linux", "tags": ["unauthorized", "no-billing"]}
         }
     ]
     
