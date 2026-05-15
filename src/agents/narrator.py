@@ -6,12 +6,14 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from src.state import GraphState
 from src.logger import log_agent_action
+from src.llm_config import get_llm
 
 def narrator_node(state: GraphState) -> GraphState:
     """
     The Narrator Agent node. Generates and PERSISTS a comprehensive Evidence Report.
     """
-    llm = ChatOpenAI(model="google/gemma-4-e4b", temperature=0.7)
+    model_name = os.getenv("MODEL_NAME", "google/gemma-2b-it")
+    llm = get_llm(model_name, temperature=0.7)
     
     incident_id = state.get("incident_id", "Unknown")
     logs = state.get("logs", [])
@@ -29,26 +31,6 @@ def narrator_node(state: GraphState) -> GraphState:
         template="""You are a Senior Compliance Auditor and Forensic Expert.
         Generate a professional, high-fidelity 'Incident Evidence Report' in Markdown format.
         
-        CRITICAL: Do NOT trim the logs. Use the full technical data provided.
-        
-        If the Validation Status is 'FAILED - Needs manual remediation', emphasize this in the title and summary, indicating that autonomous remediation was exhausted.
-        
-        The report must include:
-        1. # Incident Report: {incident_id}
-        2. ## Overall Status: {final_status}
-        3. ## Summary
-        4. ## Detection & Identification (Labels: Severity, Platform, Entity)
-        5. ## Auditor Reasoning & Compliance Gaps
-        6. ## Remediation Actions & Change Ticket: {change_ticket}
-        7. ## Validation Proof & Final Conclusion (Attempts: {retry_count})
-        8. ## Raw Forensic Logs (DUMP FULL JSON HERE)
-        
-        Technical Context:
-        - Logs: {logs_str}
-        - Evaluations: {evaluations}
-        - Severity: {severity}
-        - Remediation: {remediation_action}
-        - Validation: {validation_status}
         - Entity: {offending_entity}
         - Final Status: {final_status}
         
@@ -57,20 +39,33 @@ def narrator_node(state: GraphState) -> GraphState:
         input_variables=["incident_id", "logs_str", "evaluations", "severity", "remediation_action", "validation_status", "offending_entity", "change_ticket", "final_status", "retry_count"]
     )
     
+    evals = state.get("evaluations", [])
+    latest_eval = evals[-1] if evals else {}
+    
+    audit_type = latest_eval.get("Framework", "Internal")
+    controls = ", ".join(latest_eval.get("MappedControls", ["Unknown"]))
+    description = latest_eval.get("Thought", "Compliance violation detected.")
+    
+    first_log = logs[0] if logs else {}
+    when_detected = first_log.get("timestamp", datetime.now().isoformat())
+
     chain = prompt | llm | StrOutputParser()
     
     try:
         narrative = chain.invoke({
             "incident_id": incident_id,
-            "logs_str": full_logs_str,
-            "evaluations": state.get("evaluations", []),
-            "severity": state.get("severity", "Unknown"),
-            "remediation_action": state.get("remediation_action", "None"),
-            "validation_status": state.get("validation_status", "Unknown"),
-            "offending_entity": state.get("offending_entity", "Unknown"),
-            "change_ticket": state.get("change_ticket_id", "None"),
             "final_status": final_status,
-            "retry_count": retry_count
+            "audit_type": audit_type,
+            "controls": controls,
+            "description": description,
+            "offending_entity": state.get("offending_entity", "Unknown"),
+            "severity": state.get("severity", "Unknown"),
+            "when_detected": when_detected,
+            "remediation_action": state.get("remediation_action", "None"),
+            "change_ticket": state.get("change_ticket_id", "None"),
+            "retry_count": retry_count,
+            "validation_status": state.get("validation_status", "Unknown"),
+            "logs_str": full_logs_str
         })
         
         # Save the physical evidence file

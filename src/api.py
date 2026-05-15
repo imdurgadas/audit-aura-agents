@@ -107,13 +107,6 @@ async def run_workflow(inc_id: str, payload: Optional[Dict[str, Any]] = None):
     stream = graph_app.astream(payload, config=config) if payload else graph_app.astream(None, config=config)
     
     # Handle auto-remediation timer for demo
-    async def auto_approve_timer():
-        await asyncio.sleep(20)
-        state = await graph_app.aget_state(config)
-        if state.next and state.next[0] == "approval":
-            print_system_msg(f"⏱️  Auto-Approving {inc_id} after 20s timeout.")
-            await run_workflow(inc_id) # Recursive call with no payload to resume
-
     try:
         async for event in stream:
             if isinstance(event, dict):
@@ -121,7 +114,7 @@ async def run_workflow(inc_id: str, payload: Optional[Dict[str, Any]] = None):
                     update_data = {}
                     if isinstance(state_update, dict):
                         # Capture only relevant dashboard updates
-                        update_data = {k: v for k, v in state_update.items() if k in ["severity", "remediation_action", "execution_log", "narrative", "offending_entity"]}
+                        update_data = {k: v for k, v in state_update.items() if k in ["severity", "remediation_action", "execution_log", "narrative", "offending_entity", "validation_status"]}
                     
                     message = {
                         "incident_id": inc_id,
@@ -134,21 +127,36 @@ async def run_workflow(inc_id: str, payload: Optional[Dict[str, Any]] = None):
             
         # Check final state to broadcast pause/finish events
         state = await graph_app.aget_state(config)
+        final_values = state.values
+        val_status = final_values.get("validation_status", "Unknown")
+        retry_count = final_values.get("retry_count", 0)
+
         if state.next:
+            next_node = state.next[0]
+            pause_msg = "Waiting for Human Approval"
+            if next_node == "manual_fix":
+                pause_msg = "⚠️ Workflow FAILED - Human Intervention Required"
+                
             await broadcaster.broadcast({
                 "incident_id": inc_id, 
                 "status": "paused", 
-                "next": state.next[0], 
-                "message": "Waiting for Human Approval (Auto-approving in 20s...)"
+                "next": next_node, 
+                "message": pause_msg
             })
-            # Start the fallback timer
-            asyncio.create_task(auto_approve_timer())
         else:
-            await broadcaster.broadcast({
-                "incident_id": inc_id, 
-                "status": "finished", 
-                "message": "Workflow completed successfully"
-            })
+            # Check if it actually succeeded
+            if val_status == "Failed" and retry_count >= 3:
+                 await broadcaster.broadcast({
+                    "incident_id": inc_id, 
+                    "status": "failed", 
+                    "message": "Workflow FAILED - Max retries exceeded"
+                })
+            else:
+                await broadcaster.broadcast({
+                    "incident_id": inc_id, 
+                    "status": "finished", 
+                    "message": "Workflow completed successfully"
+                })
             
     except Exception as e:
         print_system_msg(f"❌ Workflow Engine Error: {e}")

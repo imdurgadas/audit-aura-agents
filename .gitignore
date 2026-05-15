@@ -29,3 +29,4 @@ medium_log.json
 test_llm/
 checkpoint.sqlite-shm
 checkpoint.sqlite-wal
+run.sh

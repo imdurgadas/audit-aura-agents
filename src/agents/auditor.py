@@ -10,10 +10,7 @@ from pydantic import BaseModel, Field
 from src.state import GraphState
 from src.logger import log_agent_action
 from src.registry import upsert_incident
-
-# Configure for LM Studio
-os.environ["OPENAI_API_BASE"] = "http://127.0.0.1:1234/v1"
-os.environ["OPENAI_API_KEY"] = "lm-studio"
+from src.llm_config import get_llm
 
 class IndividualEvaluation(BaseModel):
     LogIndex: int = Field(description="The index of the log in the provided list.")
@@ -44,7 +41,8 @@ def perform_bulk_audit(logs: List[Dict[str, Any]]) -> List[IndividualEvaluation]
     Utility function to perform a bulk audit using the LLM.
     Used by the API to efficiently process logs before splitting into incidents.
     """
-    llm = ChatOpenAI(model="google/gemma-4-e4b", temperature=0.1)
+    model_name = os.getenv("MODEL_NAME", "google/gemma-2b-it")
+    llm = get_llm(model_name, temperature=0.1)
     parser = JsonOutputParser(pydantic_object=BulkAuditorEvaluation)
     
     scripts_dir = os.path.join(os.getcwd(), "scripts")
