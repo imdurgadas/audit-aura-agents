@@ -24,10 +24,16 @@ def route_after_auditor(state: GraphState) -> Literal["incident", "narrator", "_
     print_system_msg(f"Routing: Severity is {severity}, going to incident creation.")
     return "incident"
 
-def route_after_validator(state: GraphState) -> Literal["remediator", "resolve"]:
+def route_after_validator(state: GraphState) -> Literal["remediator", "manual_fix", "resolve"]:
     status = state.get("validation_status", "")
+    retry_count = state.get("retry_count", 0)
+    
     if status == "Failed":
-        print_system_msg("Routing: Validation Failed, cycling back to Remediator.")
+        if retry_count >= 3:
+            print_system_msg(f"Routing: Maximum retries ({retry_count}) reached. Escalating to Manual Fix.")
+            return "manual_fix"
+            
+        print_system_msg(f"Routing: Validation Failed (Attempt {retry_count}), cycling back to Remediator.")
         return "remediator"
     
     print_system_msg("Routing: Validation Succeeded, going to resolve incident.")
@@ -50,6 +56,14 @@ def route_to_remediation(state: GraphState) -> Literal["approval", "remediator"]
     print_system_msg(f"Routing: {severity} severity. Proceeding to Auto-Remediation.")
     return "remediator"
 
+def manual_fix_node(state: GraphState) -> GraphState:
+    """
+    Escalation node for manual remediation.
+    """
+    msg = "Autonomous remediation exhausted. Escalating for manual fix by security team."
+    log_agent_action("system", "Manual Fix Required", msg)
+    return {"execution_log": [{"node": "manual_fix", "message": msg, "timestamp": datetime.now().isoformat()}]}
+
 def build_graph():
     # 1. Initialize StateGraph
     workflow = StateGraph(GraphState)
@@ -62,6 +76,7 @@ def build_graph():
     workflow.add_node("remediator", remediator_node)
     workflow.add_node("change", create_change_node)
     workflow.add_node("validator", validator_node)
+    workflow.add_node("manual_fix", manual_fix_node)
     workflow.add_node("resolve", resolve_incident_node)
     workflow.add_node("narrator", narrator_node)
     
@@ -99,10 +114,14 @@ def build_graph():
         "validator",
         route_after_validator,
         {
-            "remediator": "remediator", # The Cycle
+            "remediator": "remediator", 
+            "manual_fix": "manual_fix",
             "resolve": "resolve"
         }
     )
+    
+    # From manual fix, go back to validator for final verification
+    workflow.add_edge("manual_fix", "validator")
     
     workflow.add_edge("resolve", "narrator")
     workflow.add_edge("narrator", END)

@@ -16,4 +16,7 @@ class GraphState(TypedDict):
     incident_ticket_id: Optional[str]
     change_ticket_id: Optional[str]
     mapped_controls: Optional[List[str]]
+    framework: Optional[str]
+    control_id: Optional[str]
+    retry_count: Optional[int]
     execution_log: Annotated[List[Dict[str, Any]], operator.add]

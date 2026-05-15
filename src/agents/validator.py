@@ -18,9 +18,15 @@ def validator_node(state: GraphState) -> GraphState:
     time.sleep(2)
     
     status = "Success"
-    if "Failed" in remediation_action:
+    retry_count = state.get("retry_count", 0)
+    manual_ticket = state.get("change_ticket_id")
+    
+    if manual_ticket and "CHG" in manual_ticket:
+        msg = f"Validation success: Manual fix verified via Change Ticket {manual_ticket}."
+    elif "Failed" in remediation_action or "retry" in remediation_action:
         status = "Failed"
-        msg = "Validation failed: Configuration drift still detected."
+        retry_count += 1
+        msg = f"Validation failed (Attempt {retry_count}): Configuration drift still detected."
     else:
         msg = "Validation success: Resource is now compliant."
         
@@ -30,10 +36,11 @@ def validator_node(state: GraphState) -> GraphState:
         "node": "validator",
         "message": msg,
         "timestamp": datetime.now().isoformat(),
-        "details": {"status": status}
+        "details": {"status": status, "retry_count": retry_count}
     }
         
     return {
         "validation_status": status,
+        "retry_count": retry_count,
         "execution_log": [execution_entry]
     }

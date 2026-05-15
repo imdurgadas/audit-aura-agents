@@ -20,7 +20,8 @@ class IndividualEvaluation(BaseModel):
     Thought: str = Field(description="Step-by-step reasoning explaining the compliance check.")
     ViolationDetected: bool = Field(description="True if a violation was detected.")
     Severity: str = Field(description="Severity: 'None', 'Low', 'Medium', 'Critical'.")
-    MappedControls: List[str] = Field(description="List of EXACT control IDs identified.")
+    Framework: str = Field(description="Compliance Framework: 'SOC2', 'HIPAA', 'C5', or 'Internal'.")
+    MappedControls: List[str] = Field(description="List of EXACT control IDs identified (e.g., 'CC6.1', 'AC-2').")
     RecommendedAction: str = Field(description="Remediation script filename, or 'None'.")
 
 class BulkAuditorEvaluation(BaseModel):
@@ -126,15 +127,25 @@ def auditor_node(state: GraphState) -> GraphState:
     highest_severity = "None"
     offending_entity = "unknown"
     mapped_controls = []
+    framework = "Internal"
     
     if violations:
         sev_map = {"Critical": 3, "Medium": 2, "Low": 1, "None": 0}
         violations.sort(key=lambda x: sev_map.get(x.get("Severity", "None"), 0), reverse=True)
         highest_severity = violations[0].get("Severity")
+        framework = violations[0].get("Framework", "Internal")
         
         top_idx = violations[0].get("LogIndex", 0)
         top_log = logs[top_idx] if top_idx < len(logs) else {}
-        offending_entity = top_log.get("resource_id") or top_log.get("resource") or "unknown"
+        
+        # Robust entity extraction
+        offending_entity = (
+            top_log.get("resource_id") or 
+            top_log.get("resource") or 
+            top_log.get("user_identity") or 
+            top_log.get("user") or 
+            "unknown"
+        )
         
         for v in violations:
             mapped_controls.extend(v.get("MappedControls", []))
@@ -162,5 +173,7 @@ def auditor_node(state: GraphState) -> GraphState:
         "severity": highest_severity,
         "offending_entity": offending_entity,
         "mapped_controls": list(set(mapped_controls)),
+        "framework": framework,
+        "control_id": mapped_controls[0] if mapped_controls else None,
         "execution_log": execution_entries
     }

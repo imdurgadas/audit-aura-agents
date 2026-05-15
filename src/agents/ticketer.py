@@ -23,6 +23,9 @@ def create_incident_node(state: GraphState) -> GraphState:
     msg = f"Opened Incident Ticket {ticket_id} for {entity} ({severity})"
     log_agent_action("ticketer", "Incident Created", msg)
     
+    framework = state.get("framework", "Internal")
+    control_id = state.get("control_id", "N/A")
+
     # Initialize the physical evidence file immediately as requested
     evidence_dir = "data/evidence"
     os.makedirs(evidence_dir, exist_ok=True)
@@ -32,11 +35,13 @@ def create_incident_node(state: GraphState) -> GraphState:
     initial_evidence = f"""# Incident Report: {ticket_id}
 **Status:** OPEN (Awaiting Analysis/Remediation)
 **Severity:** {severity}
+**Audit Type:** {framework}
+**Control Impacted:** {control_id}
 **Detected Entity:** {entity}
 **Detection Time:** {datetime.now().isoformat()}
 
 ## Summary
-The system has detected a potential compliance violation and initialized this evidence file. 
+The system has detected a potential compliance violation under the **{framework}** framework and initialized this forensic record. 
 
 ## Technical Details
 The following raw logs were captured during the detection phase.

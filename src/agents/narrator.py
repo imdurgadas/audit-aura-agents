@@ -13,24 +13,31 @@ def narrator_node(state: GraphState) -> GraphState:
     """
     llm = ChatOpenAI(model="google/gemma-4-e4b", temperature=0.7)
     
-    incident_id = state.get("incident_id", "Unknown")
-    logs = state.get("logs", [])
-    full_logs_str = json.dumps(logs, indent=2)
+    retry_count = state.get("retry_count", 0)
+    validation_status = state.get("validation_status", "Unknown")
     
+    # If it failed after retries, customize the prompt
+    final_status = validation_status
+    if validation_status == "Failed" and retry_count >= 3:
+        final_status = "FAILED - Needs manual remediation"
+
     prompt = PromptTemplate(
         template="""You are a Senior Compliance Auditor and Forensic Expert.
         Generate a professional, high-fidelity 'Incident Evidence Report' in Markdown format.
         
         CRITICAL: Do NOT trim the logs. Use the full technical data provided.
         
+        If the Validation Status is 'FAILED - Needs manual remediation', emphasize this in the title and summary, indicating that autonomous remediation was exhausted.
+        
         The report must include:
         1. # Incident Report: {incident_id}
-        2. ## Summary
-        3. ## Detection & Identification (Labels: Severity, Platform, Entity)
-        4. ## Auditor Reasoning & Compliance Gaps
-        5. ## Remediation Actions & Change Ticket: {change_ticket}
-        6. ## Validation Proof & Closure Status
-        7. ## Raw Forensic Logs (DUMP FULL JSON HERE)
+        2. ## Overall Status: {final_status}
+        3. ## Summary
+        4. ## Detection & Identification (Labels: Severity, Platform, Entity)
+        5. ## Auditor Reasoning & Compliance Gaps
+        6. ## Remediation Actions & Change Ticket: {change_ticket}
+        7. ## Validation Proof & Final Conclusion (Attempts: {retry_count})
+        8. ## Raw Forensic Logs (DUMP FULL JSON HERE)
         
         Technical Context:
         - Logs: {logs_str}
@@ -39,10 +46,11 @@ def narrator_node(state: GraphState) -> GraphState:
         - Remediation: {remediation_action}
         - Validation: {validation_status}
         - Entity: {offending_entity}
+        - Final Status: {final_status}
         
         Write the final report:
         """,
-        input_variables=["incident_id", "logs_str", "evaluations", "severity", "remediation_action", "validation_status", "offending_entity", "change_ticket"]
+        input_variables=["incident_id", "logs_str", "evaluations", "severity", "remediation_action", "validation_status", "offending_entity", "change_ticket", "final_status", "retry_count"]
     )
     
     chain = prompt | llm | StrOutputParser()
@@ -56,7 +64,9 @@ def narrator_node(state: GraphState) -> GraphState:
             "remediation_action": state.get("remediation_action", "None"),
             "validation_status": state.get("validation_status", "Unknown"),
             "offending_entity": state.get("offending_entity", "Unknown"),
-            "change_ticket": state.get("change_ticket_id", "None")
+            "change_ticket": state.get("change_ticket_id", "None"),
+            "final_status": final_status,
+            "retry_count": retry_count
         })
         
         # Save the physical evidence file
