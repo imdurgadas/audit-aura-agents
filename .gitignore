@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/
+
+# System
+.DS_Store
+
+# Audit Aura Data (Persistence)
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/*.db
+data/chroma_db/
+data/evidence/
+
+# Temporary / Log files
+*.log
+fail_log.json
+medium_log.json
+test_llm/
+checkpoint.sqlite-shm
+checkpoint.sqlite-wal
