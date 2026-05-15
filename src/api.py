@@ -332,40 +332,56 @@ async def dashboard_stats():
 async def simulate_logs(request: Request):
     """Convenience endpoint to trigger a simulation of violations with mixed severities."""
     # We'll send 3 logs: 1 Critical (needs approval), 1 Low (auto-remediate), 1 Medium (auto-remediate)
+    now = datetime.now().isoformat()
     sample_logs = [
         {
-            "event_source": "aws.s3",
-            "event_type": "PutBucketPublicAccessBlock",
-            "resource_id": "prod-audit-forensics-vault-us-east-1",
-            "user_identity": "contractor-jenkins-svc",
-            "timestamp": datetime.now().isoformat(),
-            "action": "s3.PublicAccessDisabled",
-            "raw_details": {"PublicAccessBlock": "false", "RestrictPublicBuckets": "false"}
+            "eventTime": now,
+            "eventSource": "s3.amazonaws.com",
+            "eventName": "PutBucketPublicAccessBlock",
+            "awsRegion": "us-east-1",
+            "requestParameters": {
+                "bucketName": "prod-audit-forensics-vault-us-east-1",
+                "PublicAccessBlockConfiguration": {"BlockPublicAcls": "false", "IgnorePublicAcls": "false"}
+            },
+            "userIdentity": {"type": "AssumedRole", "principalId": "contractor-jenkins-svc"}
         },
         {
-            "event_source": "kubernetes",
-            "event_type": "CreateRoleBinding",
-            "resource_id": "k8s-admin-binding-escalation",
-            "user_identity": "github-actions-runner",
-            "timestamp": datetime.now().isoformat(),
-            "action": "rbac.authorization.k8s.io/create",
-            "raw_details": {"role": "cluster-admin", "subject": "system:unauthenticated"}
+            "kind": "Event",
+            "apiVersion": "v1",
+            "metadata": {"name": "k8s-admin-binding-escalation", "namespace": "kube-system"},
+            "involvedObject": {"kind": "ClusterRoleBinding", "name": "cluster-admin"},
+            "reason": "Created",
+            "message": "ClusterRoleBinding cluster-admin created with system:unauthenticated subject",
+            "firstTimestamp": now,
+            "lastTimestamp": now,
+            "source": {"component": "kube-apiserver"},
+            "user": {"username": "github-actions-runner"}
         },
         {
-            "event_source": "azure.compute",
-            "event_type": "VirtualMachineCreate",
-            "resource_id": "corp-dev-sandbox-vm-04",
-            "user_identity": "external-vendor-01",
-            "timestamp": datetime.now().isoformat(),
-            "action": "Microsoft.Compute/virtualMachines/write",
-            "raw_details": {"encryptionAtHost": "false", "disks": [{"encryptionSettings": {"enabled": "false"}}]}
+            "action": "iam-identity.mfa.disable",
+            "outcome": "success",
+            "initiator": {"id": "external-vendor-01", "name": "vendor-admin", "type": "user"},
+            "target": {"id": "account-mfa-settings", "type": "account-config"},
+            "eventTime": now,
+            "reason": {"reasonCode": 200, "reasonType": "OK"},
+            "logSourceCRN": "crn:v1:bluemix:public:activity-tracker:global:a/audit-aura::"
+        },
+        {
+            "correlationId": "azure-vm-04-sync",
+            "resourceId": "/subscriptions/audit-aura/resourceGroups/prod/providers/Microsoft.Compute/virtualMachines/corp-dev-sandbox-vm-04",
+            "eventTimestamp": now,
+            "operationName": "Microsoft.Compute/virtualMachines/write",
+            "properties": {
+                "encryptionAtHost": "false",
+                "storageProfile": {"osDisk": {"encryptionSettings": {"enabled": "false"}}}
+            }
         },
         {
             "event_source": "shadow-it.compute",
             "event_type": "InstanceLaunch",
             "resource_id": "unknown-unmanaged-node-99",
             "user_identity": "anonymous-api-key",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now,
             "action": "compute.instance.launch",
             "raw_details": {"os": "outdated-linux", "tags": ["unauthorized", "no-billing"]}
         }
